@@ -6,3 +6,4 @@ streamlit-autorefresh
 altair
 python-binance
 pytz
+plotly
