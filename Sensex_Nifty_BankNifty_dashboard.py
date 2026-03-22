@@ -316,7 +316,12 @@ def advanced_signal(df5, df15, option_df):
 # UI
 # ==========================================
 st.markdown("<h1>🏦 OPTIONS DASHBOARD 🏦</h1>", unsafe_allow_html=True)
-st.markdown(f"### ⏰ Time: {datetime.now().strftime('%H:%M:%S')}")
+import pytz
+
+ist = pytz.timezone("Asia/Kolkata")
+current_time = datetime.now(ist)
+
+st.markdown(f"### ⏰ Time (IST): {current_time.strftime('%H:%M:%S')}")
 
 # Updated Dropdown
 symbol = st.selectbox("Select Instrument", ["SENSEX", "NIFTY", "BANKNIFTY", "FINNIFTY", "NIFTY FUT"])
