@@ -15,7 +15,8 @@ import os
 # ENV
 # ================================
 load_dotenv()
-client = Client("", "")
+client = Client(st.secrets["BINANCE_API_KEY"], st.secrets["BINANCE_API_SECRET"])
+client.API_URL = 'https://api1.binance.com/api' # Try api1, api2, or api3
 
 SYMBOLS = {"BTC": "BTCUSDT", "ETH": "ETHUSDT"}
 
