@@ -9,6 +9,7 @@ import ta
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 import altair as alt
+import pytz
 
 # CONFIG
 API_KEY = "zirmcjssldz9okdc"
@@ -21,9 +22,13 @@ kite.set_access_token(ACCESS_TOKEN)
 st_autorefresh(interval=60000, key="refresh")
 
 # ==========================================
-# UI STYLE
+# UI STYLE & SESSION STATE
 # ==========================================
 st.set_page_config(layout="wide")
+
+# Initialize Trade History in session state so it survives refreshes
+if "trade_history" not in st.session_state:
+    st.session_state.trade_history = []
 
 st.markdown("""
 <style>
@@ -108,7 +113,7 @@ def get_token(symbol):
 # ==========================================
 def get_data(token, tf):
     now = datetime.now()
-    from_date = now - pd.Timedelta(days=5)
+    from_date = now - pd.Timedelta(days=3)
 
     try:
         data = kite.historical_data(token, from_date, now, tf)
@@ -316,7 +321,6 @@ def advanced_signal(df5, df15, option_df):
 # UI
 # ==========================================
 st.markdown("<h1>🏦 OPTIONS DASHBOARD 🏦</h1>", unsafe_allow_html=True)
-import pytz
 
 ist = pytz.timezone("Asia/Kolkata")
 current_time = datetime.now(ist)
@@ -344,22 +348,6 @@ else:
 
 signal = advanced_signal(df5, df15, option_df)
 smart_flow = smart_money_flow(option_df)
-
-# ==========================
-# TRADE HISTORY INIT
-# ==========================
-if "trade_log" not in st.session_state:
-    st.session_state.trade_log = pd.DataFrame(columns=["Time", "Symbol", "Signal", "Price"])
-
-# Add new trade entry only when signal is CALL or PUT
-if signal in ["CALL", "PUT"]:
-    new_entry = pd.DataFrame([{
-        "Time": current_time.strftime('%H:%M:%S'),
-        "Symbol": symbol,
-        "Signal": signal,
-        "Price": round(price, 2)
-    }])
-    st.session_state.trade_log = pd.concat([st.session_state.trade_log, new_entry], ignore_index=True)
 
 # ✅ ONLY ADD
 support, resistance = calculate_support_resistance(df5)
@@ -398,6 +386,23 @@ else:
 def lots(p): return int(capital//(p*lot)) if p else 0
 
 # ==========================================
+# 📝 UPDATE: TRADE LOGGING LOGIC
+# ==========================================
+if signal in ["CALL", "PUT"]:
+    # Log only if it's a new unique signal for this strike to avoid duplicate lines per minute
+    last_signal = st.session_state.trade_history[-1] if st.session_state.trade_history else None
+    if not last_signal or last_signal["Signal"] != signal or last_signal["Strike"] != atm:
+        st.session_state.trade_history.append({
+            "Time": current_time.strftime('%H:%M:%S'),
+            "Signal": signal,
+            "Symbol": symbol,
+            "Strike": atm,
+            "Type": "CE" if signal == "CALL" else "PE",
+            "LTP": atm_p,
+            "Capital": capital
+        })
+
+# ==========================================
 # METRICS
 # ==========================================
 c1,c2,c3,c4,c5 = st.columns(5)
@@ -432,15 +437,20 @@ st.markdown(f"""
 🔴 OI Resistance: {oi_resistance}
 """)
 
-# ===============
-# TRADE HISTORY
-# ===============
-st.subheader("📋 Trade History")
-
-if "trade_log" in st.session_state and not st.session_state.trade_log.empty:
-    st.dataframe(st.session_state.trade_log.iloc[::-1], use_container_width=True)
+# ==========================================
+# 📊 NEW: TRADE HISTORY TABLE
+# ==========================================
+st.subheader("📋 Trade History Recommendation")
+if st.session_state.trade_history:
+    # Convert list to DataFrame and display in reverse (latest first)
+    history_df = pd.DataFrame(st.session_state.trade_history)
+    st.table(history_df.iloc[::-1])
+    
+    if st.button("Clear Trade History"):
+        st.session_state.trade_history = []
+        st.rerun()
 else:
-    st.info("No trades yet")
+    st.write("No recommendations logged yet.")
 
 # ==========================================
 # 🔥 HEATMAP (LIGHT COLOR + BOLD LABELS)
