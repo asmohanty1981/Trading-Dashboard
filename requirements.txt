@@ -1,0 +1,6 @@
+kiteconnect
+streamlit
+pandas
+ta
+streamlit-autorefresh
+altair
