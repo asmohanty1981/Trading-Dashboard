@@ -345,6 +345,22 @@ else:
 signal = advanced_signal(df5, df15, option_df)
 smart_flow = smart_money_flow(option_df)
 
+# ==========================
+# TRADE HISTORY INIT
+# ==========================
+if "trade_log" not in st.session_state:
+    st.session_state.trade_log = pd.DataFrame(columns=["Time", "Symbol", "Signal", "Price"])
+
+# Add new trade entry only when signal is CALL or PUT
+if signal in ["CALL", "PUT"]:
+    new_entry = pd.DataFrame([{
+        "Time": current_time.strftime('%H:%M:%S'),
+        "Symbol": symbol,
+        "Signal": signal,
+        "Price": round(price, 2)
+    }])
+    st.session_state.trade_log = pd.concat([st.session_state.trade_log, new_entry], ignore_index=True)
+
 # ✅ ONLY ADD
 support, resistance = calculate_support_resistance(df5)
 oi_support, oi_resistance = calculate_oi_levels(option_df)
@@ -415,6 +431,16 @@ st.markdown(f"""
 🟢 OI Support: {oi_support}
 🔴 OI Resistance: {oi_resistance}
 """)
+
+# ===============
+# TRADE HISTORY
+# ===============
+st.subheader("📋 Trade History")
+
+if "trade_log" in st.session_state and not st.session_state.trade_log.empty:
+    st.dataframe(st.session_state.trade_log.iloc[::-1], use_container_width=True)
+else:
+    st.info("No trades yet")
 
 # ==========================================
 # 🔥 HEATMAP (LIGHT COLOR + BOLD LABELS)
