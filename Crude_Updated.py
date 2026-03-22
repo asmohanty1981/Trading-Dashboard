@@ -1,5 +1,5 @@
 # ==========================================
-# 🛢️ CRUDE OPTIONS DASHBOARD (FINAL - CAPITAL OPTIMIZED)
+# 🏦 OPTIONS DASHBOARD (SENSEX + NIFTY + BANKNIFTY + FINNIFTY)
 # ==========================================
 
 import streamlit as st
@@ -9,6 +9,7 @@ import ta
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 import altair as alt
+import pytz
 
 # CONFIG
 API_KEY = "zirmcjssldz9okdc"
@@ -17,58 +18,102 @@ ACCESS_TOKEN = "DaU1Ie6Lt977zpdNWUu8f12Jvw9VLJxN"
 kite = KiteConnect(api_key=API_KEY)
 kite.set_access_token(ACCESS_TOKEN)
 
-st.set_page_config(layout="wide")
-st.title("🛢️CRUDE OPTIONS DASHBOARD")
-
-# =====================
-# 🕒 CLOCK (TOP RIGHT)
-# =====================
-col_left, col_right = st.columns([8,2])
-
-import pytz
-
-with col_right:
-    ist = pytz.timezone("Asia/Kolkata")
-    current_time = datetime.now(ist)
-
-st.markdown(f"### ⏰ Time (IST): {current_time.strftime('%H:%M:%S')}")
-
+# AUTO REFRESH
 st_autorefresh(interval=60000, key="refresh")
 
-# ==========
-# TRADE LOG
-# ==========
-if "trade_log" not in st.session_state:
-    st.session_state.trade_log = pd.DataFrame(columns=[
-        "Time","Signal","Symbol","Strike","Type","LTP","Capital"
-    ])
+# ==========================================
+# UI STYLE & SESSION STATE
+# ==========================================
+st.set_page_config(layout="wide")
 
-# ==================
+# Initialize Trade History in session state so it survives refreshes
+if "trade_history" not in st.session_state:
+    st.session_state.trade_history = []
+
+st.markdown("""
+<style>
+.main {background-color:#f5f7fa;}
+h1 {text-align:center;}
+
+[data-testid="stMetricValue"] {
+    font-weight: 800 !important;
+    color: #111 !important;
+    font-size: 22px !important;
+}
+
+[data-testid="stMetricLabel"] {
+    font-weight: 600 !important;
+    color: #444 !important;
+}
+
+.trade-box {
+    padding:20px;
+    border-radius:12px;
+    font-size:16px;
+    font-weight:500;
+}
+buy-box {background:#e6f4ea;border-left:6px solid green;}
+sell-box {background:#fdecea;border-left:6px solid red;}
+wait-box {background:#fff4e5;border-left:6px solid orange;}
+</style>
+""", unsafe_allow_html=True)
+
+# ==========================================
 # LOAD INSTRUMENTS
-# ==================
+# ==========================================
 @st.cache_data(ttl=86400)
 def load_instruments():
-    return pd.DataFrame(kite.instruments("MCX"))
+    return pd.DataFrame(kite.instruments())
 
 instruments = load_instruments()
 
-def get_token():
-    df = instruments[
-        (instruments["name"]=="CRUDEOIL") &
-        (instruments["segment"]=="MCX-FUT")
-    ].copy()
+# ==========================================
+# TOKEN
+# ==========================================
+def get_token(symbol):
 
-    df = df[df["expiry"]>=pd.Timestamp.today().date()]
-    df = df.sort_values("expiry")
+    if symbol == "NIFTY":
+        df = instruments[
+            (instruments["name"] == "NIFTY 50") &
+            (instruments["segment"] == "INDICES")
+        ]
+        return int(df.iloc[0]["instrument_token"])
 
-    return int(df.iloc[0]["instrument_token"])
+    elif symbol == "SENSEX":
+        df = instruments[
+            (instruments["name"] == "SENSEX") &
+            (instruments["segment"] == "INDICES")
+        ]
+        return int(df.iloc[0]["instrument_token"])
 
-# =======
+    elif symbol == "BANKNIFTY":
+        df = instruments[
+            (instruments["name"] == "NIFTY BANK") &
+            (instruments["segment"] == "INDICES")
+        ]
+        return int(df.iloc[0]["instrument_token"])
+
+    elif symbol == "FINNIFTY":
+        df = instruments[
+            (instruments["name"] == "NIFTY FIN SERVICE") &
+            (instruments["segment"] == "INDICES")
+        ]
+        return int(df.iloc[0]["instrument_token"])
+
+    elif symbol == "NIFTY FUT":
+        df = instruments[
+            (instruments["name"] == "NIFTY") &
+            (instruments["segment"] == "NFO-FUT")
+        ]
+        df = df.sort_values("expiry")
+        return int(df.iloc[0]["instrument_token"])
+
+# ==========================================
 # DATA
-# =======
+# ==========================================
 def get_data(token, tf):
     now = datetime.now()
-    from_date = now - pd.Timedelta(days=5)
+    from_date = now - pd.Timedelta(days=3)
 
     try:
         data = kite.historical_data(token, from_date, now, tf)
@@ -80,266 +125,372 @@ def get_data(token, tf):
         df.set_index("date", inplace=True)
     return df
 
-# ============
+# ==========================================
 # INDICATORS
-# ============
+# ==========================================
 def apply_indicators(df):
     if df.empty:
         return df
 
-    df["EMA9"] = ta.trend.ema_indicator(df["close"], 9)
-    df["EMA21"] = ta.trend.ema_indicator(df["close"], 21)
+    df["EMA20"] = ta.trend.ema_indicator(df["close"], 20)
+    df["EMA50"] = ta.trend.ema_indicator(df["close"], 50)
     df["RSI"] = ta.momentum.rsi(df["close"], 14)
 
     macd = ta.trend.MACD(df["close"])
     df["MACD"] = macd.macd()
     df["MACD_SIGNAL"] = macd.macd_signal()
 
-    df["date_only"] = df.index.date
+    df["VWAP"] = (df["close"] * df["volume"]).cumsum() / df["volume"].cumsum()
 
-    df["cum_vol"] = df.groupby("date_only")["volume"].cumsum()
-    df["cum_pv"] = (df["close"] * df["volume"]).groupby(df["date_only"]).cumsum()
-    
-    df["VWAP"] = df["cum_pv"] / df["cum_vol"]
-    
-    df.drop(["cum_vol", "cum_pv"], axis=1, inplace=True)
+    df["EMA9"] = ta.trend.ema_indicator(df["close"], 9)
+    df["EMA21"] = ta.trend.ema_indicator(df["close"], 21)
 
-    adx = ta.trend.ADXIndicator(df["high"], df["low"], df["close"])
-    df["ADX"] = adx.adx()
-    df["+DI"] = adx.adx_pos()
-    df["-DI"] = adx.adx_neg()
+    try:
+        if len(df) > 30:
+            adx = ta.trend.ADXIndicator(df["high"], df["low"], df["close"])
+            df["ADX"] = adx.adx()
+            df["+DI"] = adx.adx_pos()
+            df["-DI"] = adx.adx_neg()
+        else:
+            df["ADX"] = 0
+            df["+DI"] = 0
+            df["-DI"] = 0
+    except:
+        df["ADX"] = 0
+        df["+DI"] = 0
+        df["-DI"] = 0
 
     return df
 
-# ==============
+# ==========================================
+# ✅ ADD ONLY (SUPPORT / RESISTANCE)
+# ==========================================
+def calculate_support_resistance(df, window=20):
+    if df.empty or len(df) < window:
+        return None, None
+    support = df["low"].rolling(window).min().iloc[-1]
+    resistance = df["high"].rolling(window).max().iloc[-1]
+    return support, resistance
+
+def calculate_oi_levels(option_df):
+    if option_df.empty or "type" not in option_df.columns:
+        return None, None
+
+    pe_df = option_df[option_df["type"] == "PE"]
+    ce_df = option_df[option_df["type"] == "CE"]
+
+    support = pe_df.loc[pe_df["oi"].idxmax()]["strike"] if not pe_df.empty else None
+    resistance = ce_df.loc[ce_df["oi"].idxmax()]["strike"] if not ce_df.empty else None
+
+    return support, resistance
+
+# ==========================================
 # OPTION CHAIN
-# ==============
-def get_option_chain(price):
-    df = instruments.copy()
+# ==========================================
+def get_option_chain(symbol, price):
 
-    df = df[(df["name"]=="CRUDEOIL") &
-            (df["segment"].str.contains("MCX-OPT"))]
+    if symbol == "SENSEX":
+        exch = "BFO"
+        seg = "BFO-OPT"
+        name = "SENSEX"
+    elif symbol == "BANKNIFTY":
+        exch = "NFO"
+        seg = "NFO-OPT"
+        name = "BANKNIFTY"
+    elif symbol == "FINNIFTY":
+        exch = "NFO"
+        seg = "NFO-OPT"
+        name = "FINNIFTY"
+    else:
+        exch = "NFO"
+        seg = "NFO-OPT"
+        name = "NIFTY"
 
-    expiry = df["expiry"].min()
-    df = df[df["expiry"]==expiry]
+    df = pd.DataFrame(kite.instruments(exch))
+
+    expiry = df[
+        (df["name"] == name) &
+        (df["segment"] == seg)
+    ]["expiry"].min()
+
+    df = df[
+        (df["name"] == name) &
+        (df["expiry"] == expiry)
+    ].copy()
 
     df["diff"] = abs(df["strike"] - price)
-    df = df.sort_values("diff").head(60)
+    df = df.sort_values("diff").head(30)
 
-    quotes = kite.quote([f"MCX:{x}" for x in df["tradingsymbol"]])
+    quotes = kite.quote([f"{exch}:{x}" for x in df["tradingsymbol"]])
 
     rows = []
     for _, r in df.iterrows():
-        q = quotes.get(f"MCX:{r['tradingsymbol']}", {})
+        q = quotes.get(f"{exch}:{r['tradingsymbol']}", {})
         rows.append({
-            "symbol": r["tradingsymbol"],
             "strike": r["strike"],
             "type": r["instrument_type"],
-            "ltp": q.get("last_price",0),
-            "oi": q.get("oi",0),
-            "volume": q.get("volume",0)
+            "ltp": q.get("last_price", 0),
+            "oi": q.get("oi", 0),
+            "oi_change": q.get("oi_day_high", 0) - q.get("oi_day_low", 0),
+            "volume": q.get("volume", 0)
         })
 
     return pd.DataFrame(rows)
 
-# ===========================
-# SIGNAL LOGIC (UPDATED)
-# ===========================
-def advanced_signal(df5, df15):
+# ==========================================
+# PCR / SMART MONEY / SIGNAL (UNCHANGED)
+# ==========================================
+def calculate_pcr(option_df):
+    if option_df.empty or "type" not in option_df.columns:
+        return 1
+    ce_oi = option_df[option_df["type"] == "CE"]["oi"].sum()
+    pe_oi = option_df[option_df["type"] == "PE"]["oi"].sum()
+    return pe_oi / ce_oi if ce_oi != 0 else 1
 
-    if len(df5) < 3 or len(df15) < 3:
-        return "NO TRADE"
+def smart_money_flow(option_df):
+    if option_df.empty or "type" not in option_df.columns:
+        return "No Data"
+    ce_oi = option_df[option_df["type"] == "CE"]["oi"].sum()
+    pe_oi = option_df[option_df["type"] == "PE"]["oi"].sum()
+    ce_vol = option_df[option_df["type"] == "CE"]["volume"].sum()
+    pe_vol = option_df[option_df["type"] == "PE"]["volume"].sum()
+    pcr = pe_oi / ce_oi if ce_oi != 0 else 0
+
+    if pcr > 1.2 and pe_vol > ce_vol:
+        return "🟢 FII Bullish (Put Writing)"
+    elif pcr < 0.8 and ce_vol > pe_vol:
+        return "🔴 FII Bearish (Call Writing)"
+    elif pcr > 1:
+        return "🟡 Mild Bullish"
+    elif pcr < 1:
+        return "🟡 Mild Bearish"
+    return "⚪ Neutral"
+
+def advanced_signal(df5, df15, option_df):
+    if df5.empty or df15.empty:
+        return "WAIT"
+
+    if option_df.empty or "type" not in option_df.columns:
+        return "WAIT"
 
     l5 = df5.iloc[-1]
     l15 = df15.iloc[-1]
+    pcr = calculate_pcr(option_df)
 
-    ema_bull = l15["EMA9"] > l15["EMA21"]
-    ema_bear = l15["EMA9"] < l15["EMA21"]
+    trend_bullish = (
+        l5["EMA20"] > l5["EMA50"] and
+        l5["RSI"] > 55 and
+        l5["MACD"] > l5["MACD_SIGNAL"] and
+        pcr > 1
+    )
 
-    above_vwap = l5["close"] > l5["VWAP"]
-    below_vwap = l5["close"] < l5["VWAP"]
+    trend_bearish = (
+        l5["EMA20"] < l5["EMA50"] and
+        l5["RSI"] < 45 and
+        l5["MACD"] < l5["MACD_SIGNAL"] and
+        pcr < 1
+    )
 
-    strong_trend = l5["ADX"] > 25
-    rsi = l5["RSI"]
+    price_bullish = (
+        l15["EMA9"] > l15["EMA21"] and
+        l5["close"] > l15["high"] and
+        l5["close"] > l5["VWAP"] and
+        l5["ADX"] > 25 and
+        l5["+DI"] > l5["-DI"]
+    )
 
-    # 🚫 NO TREND
-    if l5["ADX"] < 20:
-        return "NO TRADE"
+    price_bearish = (
+        l15["EMA9"] < l15["EMA21"] and
+        l5["close"] < l15["low"] and
+        l5["close"] < l5["VWAP"] and
+        l5["ADX"] > 25 and
+        l5["-DI"] > l5["+DI"]
+    )
 
-    # 🟢 CALL
-    if ema_bull and above_vwap and strong_trend and l5["+DI"] > l5["-DI"] and rsi > 60:
-        prev_high = df5["high"].iloc[-2]
-        if l5["close"] < prev_high:
-            return "NO TRADE"
+    if trend_bullish and price_bullish:
         return "CALL"
-
-    # 🔴 PUT
-    if ema_bear and below_vwap and strong_trend and l5["-DI"] > l5["+DI"] and rsi < 40:
-        prev_low = df5["low"].iloc[-2]
-        if l5["close"] > prev_low:
-            return "NO TRADE"
+    elif trend_bearish and price_bearish:
         return "PUT"
+    elif trend_bullish or price_bullish:
+        return "CALL"
+    elif trend_bearish or price_bearish:
+        return "PUT"
+    return "WAIT"
 
-    return "NO TRADE"
+# ==========================================
+# UI
+# ==========================================
+st.markdown("<h1>🏦 OPTIONS DASHBOARD 🏦</h1>", unsafe_allow_html=True)
 
-# ==============
-# TRADE ENGINE
-# ==============
-def get_trade_options(option_df, signal, price, capital=30000, lot=1):
+ist = pytz.timezone("Asia/Kolkata")
+current_time = datetime.now(ist)
 
-    if signal == "NO TRADE":
-        return {"ATM": None, "ITM": None, "OTM": None, "ideal": 0}
+st.markdown(f"### ⏰ Time (IST): {current_time.strftime('%H:%M:%S')}")
 
-    df = option_df.copy()
-    df = df[df["type"] == ("CE" if signal=="CALL" else "PE")]
+# Updated Dropdown
+symbol = st.selectbox("Select Instrument", ["NIFTY", "SENSEX" "BANKNIFTY", "FINNIFTY", "NIFTY FUT"])
 
-    df["cost"] = df["ltp"] * 100
+token = get_token(symbol)
 
-    ideal = capital
-    lower = ideal * 0.6
-    upper = ideal * 1.2
-
-    df_budget = df[(df["cost"] >= lower) & (df["cost"] <= upper)]
-
-    if df_budget.empty:
-        df_budget = df[df["cost"] > 0].sort_values("cost").head(10)
-
-    df_budget["dist"] = abs(df_budget["strike"] - price)
-    df_budget = df_budget.sort_values("dist")
-
-    atm = df_budget.iloc[0:1]
-
-    if signal=="CALL":
-        itm = df_budget[df_budget["strike"]<price].head(1)
-        otm = df_budget[df_budget["strike"]>price].head(1)
-    else:
-        itm = df_budget[df_budget["strike"]>price].head(1)
-        otm = df_budget[df_budget["strike"]<price].head(1)
-
-    def pick(d):
-        return d.iloc[0] if not d.empty else None
-
-    return {
-        "ATM": pick(atm),
-        "ITM": pick(itm),
-        "OTM": pick(otm),
-        "ideal": round(ideal,2)
-    }
-
-# =======
-# MAIN
-# =======
-token = get_token()
-
-df5 = apply_indicators(get_data(token,"5minute"))
-df15 = apply_indicators(get_data(token,"15minute"))
+df5 = apply_indicators(get_data(token, "5minute"))
+df15 = apply_indicators(get_data(token, "15minute"))
 
 if df5.empty:
     st.error("No data")
     st.stop()
 
 price = df5["close"].iloc[-1]
-option_df = get_option_chain(price)
 
-signal = advanced_signal(df5, df15)
-trades = get_trade_options(option_df, signal, price)
+if symbol != "NIFTY FUT":
+    option_df = get_option_chain(symbol, price)
+else:
+    option_df = pd.DataFrame()
 
-# ============
-# SAVE TRADE
-# ============
-if signal != "NO TRADE" and trades["ATM"] is not None:
-    t = trades["ATM"]
+signal = advanced_signal(df5, df15, option_df)
+smart_flow = smart_money_flow(option_df)
 
-    new_row = pd.DataFrame([{
-        "Time": datetime.now().strftime("%H:%M:%S"),
-        "Signal": signal,
-        "Symbol": t["symbol"],
-        "Strike": t["strike"],
-        "Type": t["type"],
-        "LTP": float(t["ltp"]),
-        "Capital": float(t["ltp"] * 100)
-    }])
+# ✅ ONLY ADD
+support, resistance = calculate_support_resistance(df5)
+oi_support, oi_resistance = calculate_oi_levels(option_df)
 
-    if st.session_state.trade_log.empty:
-        st.session_state.trade_log = new_row
-    else:
-        if st.session_state.trade_log.iloc[-1]["Symbol"] != t["symbol"]:
-            st.session_state.trade_log = pd.concat(
-                [st.session_state.trade_log, new_row],
-                ignore_index=True
-            ).tail(50)
+# ==========================================
+# CAPITAL
+# ==========================================
+capital = 12000
 
-# ======
-# UI
-# ======
+# Updated Maps for Lot Size and Strike Steps
+lot_map = {"NIFTY":50, "SENSEX":10, "BANKNIFTY":15, "FINNIFTY":40, "NIFTY FUT":50}
+step_map = {"NIFTY":50,"SENSEX":100, "BANKNIFTY":100, "FINNIFTY":50, "NIFTY FUT":50}
+
+lot = lot_map[symbol]
+step = step_map[symbol]
+
+atm = round(price/step)*step
+itm = atm-step
+otm = atm+step
+
+def get_premium(strike, typ):
+    if option_df.empty or "strike" not in option_df.columns:
+        return 0
+
+    r = option_df[
+        (option_df["strike"] == strike) & (option_df["type"] == typ)
+    ]
+    return r.iloc[0]["ltp"] if not r.empty else 0
+
+if signal=="CALL":
+    atm_p = get_premium(atm,"CE")
+else:
+    atm_p = get_premium(atm,"PE")
+
+def lots(p): return int(capital//(p*lot)) if p else 0
+
+# ==========================================
+# 📝 UPDATE: TRADE LOGGING LOGIC
+# ==========================================
+if signal in ["CALL", "PUT"]:
+    # Log only if it's a new unique signal for this strike to avoid duplicate lines per minute
+    last_signal = st.session_state.trade_history[-1] if st.session_state.trade_history else None
+    if not last_signal or last_signal["Signal"] != signal or last_signal["Strike"] != atm:
+        st.session_state.trade_history.append({
+            "Time": current_time.strftime('%H:%M:%S'),
+            "Signal": signal,
+            "Symbol": symbol,
+            "Strike": atm,
+            "Type": "CE" if signal == "CALL" else "PE",
+            "LTP": atm_p,
+            "Capital": capital
+        })
+
+# ==========================================
+# METRICS
+# ==========================================
 c1,c2,c3,c4,c5 = st.columns(5)
+c1.metric("Price",round(price,2))
+c2.metric("RSI",round(df5["RSI"].iloc[-1],2))
+c3.metric("Trend","UP" if df5["EMA20"].iloc[-1]>df5["EMA50"].iloc[-1] else "DOWN")
+c4.metric("ADX",round(df5["ADX"].iloc[-1],2))
+c5.metric("Signal",signal)
 
-c1.metric("Price", round(price,2))
-c2.metric("Signal", signal)
-c3.metric("RSI", round(df5["RSI"].iloc[-1],2))
-c4.metric("ADX", round(df5["ADX"].iloc[-1],2))
-c5.metric("VWAP Side", "Above" if price > df5["VWAP"].iloc[-1] else "Below")
+st.markdown("### 🧠 Smart Money / FII Flow")
+st.info(smart_flow)
 
-# RSI
-rsi_val = df5["RSI"].iloc[-1]
+# ==========================================
+# TRADE OUTPUT
+# ==========================================
+st.subheader("🎯 Trade Suggestion")
 
-if rsi_val > 60:
-    st.success(f"🟢 Strong Bullish RSI: {round(rsi_val,2)}")
-elif rsi_val < 40:
-    st.error(f"🔴 Strong Bearish RSI: {round(rsi_val,2)}")
+if signal=="CALL":
+    st.success(f"CALL → ATM {atm} | Lots: {lots(atm_p)}")
+elif signal=="PUT":
+    st.error(f"PUT → ATM {atm} | Lots: {lots(atm_p)}")
 else:
-    st.warning(f"🟡 Neutral RSI: {round(rsi_val,2)}")
+    st.warning("WAIT - No clear signal")
 
-# ===============
-# TRADE DISPLAY
-# ===============
-st.subheader("🎯 Trade Suggestions")
+# ✅ ONLY ADD
+st.markdown(f"""
+### 📊 Key Levels
+🟢 Price Support: {support}
+🔴 Price Resistance: {resistance}
 
-if signal == "NO TRADE":
-    st.warning("🚫 No Trade Zone")
-else:
-    st.info(f"💰 Capital: ₹30000 | Ideal Premium: ~₹{trades['ideal']}")
-
-def show(label,t):
-    if t is None:
-        st.warning(f"{label}: Not available in budget")
-        return
-
-    st.success(f"""
-{label} ({signal})
-
-{t['symbol']}
-Strike: {t['strike']}
-LTP: {t['ltp']}
-
-💰 Premium: ₹{round(t['ltp'])}
-💰 Cost: ₹{round(t['ltp']*100)}
-
-SL: {round(t['ltp']*0.7,2)}
-T1: {round(t['ltp']*1.5,2)}
-T2: {round(t['ltp']*2,2)}
+🟢 OI Support: {oi_support}
+🔴 OI Resistance: {oi_resistance}
 """)
 
-if signal != "NO TRADE":
-    col1,col2,col3 = st.columns(3)
-    with col1: show("ATM",trades["ATM"])
-    with col2: show("ITM",trades["ITM"])
-    with col3: show("OTM",trades["OTM"])
+# ==========================================
+# 📊 NEW: TRADE HISTORY TABLE
+# ==========================================
+st.subheader("📋 Trade History Recommendation")
+if st.session_state.trade_history:
+    # Convert list to DataFrame and display in reverse (latest first)
+    history_df = pd.DataFrame(st.session_state.trade_history)
+    st.table(history_df.iloc[::-1])
+    
+    if st.button("Clear Trade History"):
+        st.session_state.trade_history = []
+        st.rerun()
+else:
+    st.write("No recommendations logged yet.")
 
-# ===============
-# TRADE HISTORY
-# ===============
-st.subheader("📋 Trade History")
-st.dataframe(st.session_state.trade_log.iloc[::-1], width='stretch')
+# ==========================================
+# 🔥 HEATMAP (LIGHT COLOR + BOLD LABELS)
+# ==========================================
+st.subheader("🔥 Open Interest Heatmap")
 
-# ========
+if option_df.empty or "strike" not in option_df.columns:
+    st.info("No option data available for heatmap")
+else:
+    heatmap_chart = alt.Chart(option_df).mark_rect().encode(
+        x=alt.X(
+            "strike:O",
+            title="Strike",
+            axis=alt.Axis(labelFontWeight="bold")  # ✅ Bold Strike
+        ),
+        y=alt.Y(
+            "type:N",
+            title="Type",
+            axis=alt.Axis(labelFontWeight="bold")  # ✅ Bold Type
+        ),
+        color=alt.Color(
+            "oi:Q",
+            scale=alt.Scale(scheme="lightorange"),  # ✅ Softer light color
+            title="Open Interest",
+            legend=alt.Legend(titleFontWeight="bold")  # ✅ Bold legend title
+        ),
+        tooltip=["strike", "type", "oi"]
+    ).properties(height=320)
+
+    st.altair_chart(heatmap_chart, use_container_width=True)
+
+# ==========================================
 # CHART
-# ========
+# ==========================================
 st.subheader("📈 Price Chart")
+
 chart_data = df5.reset_index()
 
 chart = alt.Chart(chart_data).transform_fold(
-    ["close", "EMA9", "EMA21", "VWAP"],
+    ["close", "EMA20", "EMA50", "VWAP"],
     as_=["Metric", "Value"]
 ).mark_line().encode(
     x="date:T",
@@ -347,10 +498,10 @@ chart = alt.Chart(chart_data).transform_fold(
     color="Metric:N"
 ).properties(height=400)
 
-st.altair_chart(chart, width='stretch')
+st.altair_chart(chart, use_container_width=True)
 
-# ===============
+# ==========================================
 # OPTION CHAIN
-# ===============
+# ==========================================
 st.subheader("📊 Option Chain")
-st.dataframe(option_df, width='stretch')
+st.dataframe(option_df, use_container_width=True)
