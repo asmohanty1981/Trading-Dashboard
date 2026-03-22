@@ -7,3 +7,4 @@ altair
 python-binance
 pytz
 plotly
+python-dotenv
