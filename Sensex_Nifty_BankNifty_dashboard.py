@@ -13,7 +13,7 @@ import pytz
 
 # CONFIG
 API_KEY = "zirmcjssldz9okdc"
-ACCESS_TOKEN = "DaU1Ie6Lt977zpdNWUu8f12Jvw9VLJxNN"
+ACCESS_TOKEN = "DaU1Ie6Lt977zpdNWUu8f12Jvw9VLJxN"
 
 kite = KiteConnect(api_key=API_KEY)
 kite.set_access_token(ACCESS_TOKEN)
