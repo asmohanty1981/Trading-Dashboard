@@ -15,8 +15,15 @@ import os
 # ENV
 # ================================
 load_dotenv()
-client = Client(st.secrets["BINANCE_API_KEY"], st.secrets["BINANCE_API_SECRET"])
-client.API_URL = 'https://api1.binance.com/api' # Try api1, api2, or api3
+from binance.client import Client
+import streamlit as st
+
+try:
+    client = Client()   # no API key
+    client.ping()
+    st.success("Binance reachable ✅")
+except Exception as e:
+    st.error(f"Binance blocked ❌: {e}")
 
 SYMBOLS = {"BTC": "BTCUSDT", "ETH": "ETHUSDT"}
 
