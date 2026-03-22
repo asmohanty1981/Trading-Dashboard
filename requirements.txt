@@ -4,3 +4,5 @@ pandas
 ta
 streamlit-autorefresh
 altair
+python-binance
+pytz
