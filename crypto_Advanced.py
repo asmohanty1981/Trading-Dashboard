@@ -15,7 +15,7 @@ import os
 # ENV
 # ================================
 load_dotenv()
-client = Client(st.secrets["BINANCE_API_KEY"], st.secrets["BINANCE_API_SECRET"])
+client = Client("", "")
 
 SYMBOLS = {"BTC": "BTCUSDT", "ETH": "ETHUSDT"}
 
