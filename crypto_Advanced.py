@@ -15,7 +15,8 @@ import os
 # ENV
 # ================================
 load_dotenv()
-client = Client(os.getenv("BINANCE_API_KEY"), os.getenv("BINANCE_API_SECRET"))
+# Use Streamlit's built-in secrets manager
+client = Client(st.secrets["BINANCE_API_KEY"], st.secrets["BINANCE_API_SECRET"])
 
 SYMBOLS = {"BTC": "BTCUSDT", "ETH": "ETHUSDT"}
 
