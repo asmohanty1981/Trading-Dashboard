@@ -72,16 +72,16 @@ instruments = load_instruments()
 # ==========================================
 def get_token(symbol):
 
-    if symbol == "SENSEX":
+    if symbol == "NIFTY":
         df = instruments[
-            (instruments["name"] == "SENSEX") &
+            (instruments["name"] == "NIFTY 50") &
             (instruments["segment"] == "INDICES")
         ]
         return int(df.iloc[0]["instrument_token"])
 
-    elif symbol == "NIFTY":
+    elif symbol == "SENSEX":
         df = instruments[
-            (instruments["name"] == "NIFTY 50") &
+            (instruments["name"] == "SENSEX") &
             (instruments["segment"] == "INDICES")
         ]
         return int(df.iloc[0]["instrument_token"])
@@ -328,7 +328,7 @@ current_time = datetime.now(ist)
 st.markdown(f"### ⏰ Time (IST): {current_time.strftime('%H:%M:%S')}")
 
 # Updated Dropdown
-symbol = st.selectbox("Select Instrument", ["SENSEX", "NIFTY", "BANKNIFTY", "FINNIFTY", "NIFTY FUT"])
+symbol = st.selectbox("Select Instrument", ["NIFTY", "SENSEX" "BANKNIFTY", "FINNIFTY", "NIFTY FUT"])
 
 token = get_token(symbol)
 
@@ -359,8 +359,8 @@ oi_support, oi_resistance = calculate_oi_levels(option_df)
 capital = 12000
 
 # Updated Maps for Lot Size and Strike Steps
-lot_map = {"SENSEX":10, "NIFTY":50, "BANKNIFTY":15, "FINNIFTY":40, "NIFTY FUT":50}
-step_map = {"SENSEX":100, "NIFTY":50, "BANKNIFTY":100, "FINNIFTY":50, "NIFTY FUT":50}
+lot_map = {"NIFTY":50, "SENSEX":10, "BANKNIFTY":15, "FINNIFTY":40, "NIFTY FUT":50}
+step_map = {"NIFTY":50,"SENSEX":100, "BANKNIFTY":100, "FINNIFTY":50, "NIFTY FUT":50}
 
 lot = lot_map[symbol]
 step = step_map[symbol]
