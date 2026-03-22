@@ -328,7 +328,7 @@ current_time = datetime.now(ist)
 st.markdown(f"### ⏰ Time (IST): {current_time.strftime('%H:%M:%S')}")
 
 # Updated Dropdown
-symbol = st.selectbox("Select Instrument", ["NIFTY", "SENSEX" "BANKNIFTY", "FINNIFTY", "NIFTY FUT"])
+symbol = st.selectbox("Select Instrument", ["NIFTY", "SENSEX", "BANKNIFTY", "FINNIFTY", "NIFTY FUT"])
 
 token = get_token(symbol)
 
