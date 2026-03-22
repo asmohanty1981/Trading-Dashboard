@@ -24,10 +24,12 @@ st.title("🛢️CRUDE OPTIONS DASHBOARD")
 # 🕒 CLOCK (TOP RIGHT)
 # =====================
 col_left, col_right = st.columns([8,2])
-import pytz 
+
+import pytz
+
 with col_right:
-ist = pytz.timezone("Asia/Kolkata")
-current_time = datetime.now(ist)
+    ist = pytz.timezone("Asia/Kolkata")
+    current_time = datetime.now(ist)
 
 st.markdown(f"### ⏰ Time (IST): {current_time.strftime('%H:%M:%S')}")
 
