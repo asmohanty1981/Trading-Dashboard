@@ -31,8 +31,6 @@ with col_right:
     ist = pytz.timezone("Asia/Kolkata")
     current_time = datetime.now(ist)
 
-st.markdown(f"### ⏰ Time (IST): {current_time.strftime('%H:%M:%S')}")
-
 st_autorefresh(interval=60000, key="refresh")
 
 # ==========
@@ -99,9 +97,9 @@ def apply_indicators(df):
 
     df["cum_vol"] = df.groupby("date_only")["volume"].cumsum()
     df["cum_pv"] = (df["close"] * df["volume"]).groupby(df["date_only"]).cumsum()
-
+    
     df["VWAP"] = df["cum_pv"] / df["cum_vol"]
-
+    
     df.drop(["cum_vol", "cum_pv"], axis=1, inplace=True)
 
     adx = ta.trend.ADXIndicator(df["high"], df["low"], df["close"])
