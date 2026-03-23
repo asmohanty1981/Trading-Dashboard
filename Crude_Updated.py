@@ -25,11 +25,11 @@ st.title("🛢️CRUDE OPTIONS DASHBOARD")
 # =====================
 col_left, col_right = st.columns([8,2])
 
+import pytz
+
 with col_right:
-    st.markdown(
-        f"<h4 style='text-align:right;'>🕒 {datetime.now().strftime('%H:%M:%S')}</h4>",
-        unsafe_allow_html=True
-    )
+    ist = pytz.timezone("Asia/Kolkata")
+    current_time = datetime.now(ist)
 
 st_autorefresh(interval=60000, key="refresh")
 
