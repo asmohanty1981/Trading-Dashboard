@@ -9,3 +9,5 @@ pytz
 plotly
 python-dotenv
 feedparser
+time
+numpy
