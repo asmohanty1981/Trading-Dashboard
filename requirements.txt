@@ -8,3 +8,4 @@ python-binance
 pytz
 plotly
 python-dotenv
+feedparser
